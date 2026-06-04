@@ -1,0 +1,15 @@
+{
+  "name": "Khách Hàng Điện",
+  "short_name": "KH Điện",
+  "theme_color": "#007aff",
+  "background_color": "#f2f2f7",
+  "display": "standalone",
+  "start_url": "./",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

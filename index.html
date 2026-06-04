@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Khách Hàng Điện</title>
+
+<link rel="manifest" href="manifest.json">
+
+<meta name="theme-color" content="#007aff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+
+<style>
+
+body{
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+    background:#f2f2f7;
+    margin:0;
+    padding:16px;
+}
+
+h1{
+    font-size:24px;
+}
+
+.card{
+    background:white;
+    padding:14px;
+    border-radius:18px;
+    margin-bottom:14px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+
+input,textarea{
+    width:100%;
+    padding:12px;
+    box-sizing:border-box;
+    border-radius:12px;
+    border:1px solid #ddd;
+    margin-top:8px;
+    font-size:16px;
+}
+
+textarea{
+    min-height:80px;
+    font-family:inherit;
+    white-space:pre-wrap;
+}
+
+button{
+    border:none;
+    border-radius:12px;
+    padding:12px 14px;
+    font-size:15px;
+    margin-top:8px;
+    cursor:pointer;
+}
+
+.primary{
+    background:#007aff;
+    color:white;
+}
+
+.success{
+    background:#34c759;
+    color:white;
+}
+
+.danger{
+    background:#ff3b30;
+    color:white;
+}
+
+.row{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+}
+
+.phone-card{
+    background:white;
+    padding:14px;
+    border-radius:18px;
+    margin-bottom:12px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+
+.phone-number{
+    font-size:22px;
+    font-weight:bold;
+}
+
+.status{
+    margin-top:8px;
+    margin-right:6px;
+    padding:6px 10px;
+    border-radius:999px;
+    display:inline-block;
+    font-size:13px;
+    cursor:pointer;
+}
+
+.called{
+    background:#d1f7dd;
+    color:#147a36;
+}
+
+.not-called{
+    background:#ffe4e1;
+    color:#c0392b;
+}
+
+.sms-sent{
+    background:#d1e8ff;
+    color:#0a4a8f;
+}
+
+.sms-not-sent{
+    background:#fff4d1;
+    color:#8a6d00;
+}
+
+.info-box{
+    margin-top:8px;
+    background:#fafafa;
+    border:1px solid #ddd;
+    padding:10px;
+    border-radius:12px;
+}
+
+.amount{
+    font-weight:bold;
+    color:#c0392b;
+    font-size:18px;
+}
+
+.history-box{
+    margin-top:8px;
+    background:#f0f7ff;
+    border:1px solid #cfe2ff;
+    padding:8px 10px;
+    border-radius:10px;
+    font-size:13px;
+    color:#0a4a8f;
+    white-space:pre-wrap;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>⚡ Khách Hàng Điện</h1>
+
+<div class="card">
+
+<input type="file"
+id="excelFile"
+accept=".xlsx,.xls"
+onchange="importExcel(event)">
+
+<input type="text"
+id="searchInput"
+placeholder="🔍 Tìm SĐT, mã KH, tên, địa chỉ..."
+oninput="renderList()">
+
+<div class="row">
+<button class="danger" onclick="clearAll()">
+🗑 Xóa tất cả
+</button>
+</div>
+
+<div id="counter"></div>
+
+</div>
+
+<div id="phoneList"></div>
+
+<script type="module">
+
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+  getDatabase,
+  ref,
+  set,
+  push,
+  onValue
+}
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDiw9B6q4xjKan7QkTAEH2-frn9GXaNVi8",
+  authDomain: "kh-dien.firebaseapp.com",
+  databaseURL: "https://kh-dien-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "kh-dien",
+  storageBucket: "kh-dien.firebasestorage.app",
+  messagingSenderId: "293599292144",
+  appId: "1:293599292144:web:81d4bec6b71f28cdb2f035"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+window.db = db;
+window.ref = ref;
+window.set = set;
+window.push = push;
+window.onValue = onValue;
+
+console.log("Firebase Connected");
+
+</script>
+
+<script>
+
+let phoneData =
+JSON.parse(localStorage.getItem('phoneData') || '[]');
+
+function fbKey(item){
+    return (item.customerCode || item.phone)
+        .replace(/[.#$\[\]\/]/g,'_');
+}
+
+function saveCustomer(index){
+
+    if(!window.db) return;
+
+    const item = phoneData[index];
+    const key = fbKey(item);
+
+    set(
+        ref(db,'customers/'+key+'/data'),
+        {
+            phone: item.phone||'',
+            customerCode: item.customerCode||'',
+            customerName: item.customerName||'',
+            address: item.address||'',
+            amount: String(item.amount||'0'),
+            note: item.note||'',
+            called: item.called||false,
+            time: item.time||null,
+            smsSent: item.smsSent||false,
+            smsTime: item.smsTime||null
+        }
+    );
+
+}
+
+function saveData(){
+
+    localStorage.setItem(
+        'phoneData',
+        JSON.stringify(phoneData)
+    );
+
+    phoneData.forEach((_,i) => saveCustomer(i));
+
+}
+
+function pushLog(item, text){
+
+    if(!window.db) return;
+
+    push(
+        ref(db,'customers/'+fbKey(item)+'/logs'),
+        {
+            detail: text,
+            time: new Date().toLocaleString('vi-VN'),
+            ts: Date.now()
+        }
+    );
+
+}
+
+function normalizePhone(phone){
+    return phone.replace(/[^0-9]/g,'');
+}
+
+function formatAmount(value){
+
+    if(value===null||value===undefined||value==='')
+        return '0';
+
+    const num =
+    Number(String(value).replace(/[^0-9.-]/g,''));
+
+    if(isNaN(num)) return String(value);
+
+    return num.toLocaleString('vi-VN');
+
+}
+
+function appendHistory(index, text){
+
+    const time = new Date().toLocaleString('vi-VN');
+    const line = `[${time}] ${text}`;
+    const item = phoneData[index];
+
+    if(!item.history) item.history = '';
+    item.history = item.history
+        ? item.history + '\n' + line
+        : line;
+
+    pushLog(item, text);
+
+}
+
+function buildHistoryFromLogs(logs){
+
+    if(!logs) return '';
+
+    return Object.values(logs)
+        .filter(l => l && l.time)
+        .sort((a,b) => (a.ts||0) - (b.ts||0))
+        .map(l => `[${l.time}] ${l.detail||''}`)
+        .join('\n');
+
+}
+
+function importExcel(event){
+
+    const file = event.target.files[0];
+    if(!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function(e){
+
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data,{type:'array'});
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet);
+
+        let added = 0;
+
+        json.forEach(row=>{
+
+            const customerCode =
+            row.MA_KHTT || row.MA_KH || row.MAKH || '';
+
+            const customerName =
+            row.TEN_KHTT || row.TEN_KH || '';
+
+            const address =
+            row.DCHI_KHTT || row.DCHI_KH || '';
+
+            const amount =
+            row.SO_TIEN || row.SOTIEN || row.CONGNO || '0';
+
+            const phoneRaw =
+            row.SO_DIENTHOAI || row.SDT || row.DIENTHOAI || '';
+
+            if(!phoneRaw) return;
+
+            const normalized =
+            normalizePhone(String(phoneRaw));
+
+            if(!phoneData.find(p=>p.phone===normalized)){
+
+                phoneData.push({
+                    phone: normalized,
+                    customerCode,
+                    customerName,
+                    address,
+                    amount,
+                    note: '',
+                    history: '',
+                    called: false,
+                    time: null,
+                    smsSent: false,
+                    smsTime: null
+                });
+
+                added++;
+
+            }
+
+        });
+
+        saveData();
+        renderList();
+        alert('Đã import '+added+' khách hàng');
+
+    };
+
+    reader.readAsArrayBuffer(file);
+
+}
+
+function callNumber(phone,index){
+
+    const item = phoneData[index];
+    item.called = true;
+    item.time = new Date().toLocaleString('vi-VN');
+
+    appendHistory(index,'📲 Đã bấm GỌI');
+
+    saveCustomer(index);
+    localStorage.setItem('phoneData',JSON.stringify(phoneData));
+    renderList();
+
+    window.location.href = 'tel:'+phone;
+
+}
+
+function sendSMS(phone,name,code,amount,index){
+
+    const item = phoneData[index];
+
+    const msgText =
+        'Kính gửi quý khách hàng: '+(name||'')+
+        ' - mã KH: '+(code||'')+
+        ', kính đề nghị quý khách hàng đến thực hiện ký lại hợp đồng điện tại Điện quản lý điện Nghĩa Đô - 173 Trần Đăng Ninh để việc sử dụng điện không bị gián đoạn. Mọi thắc mắc liên hệ: Thư (0866395443)';
+
+    const msg = encodeURIComponent(msgText);
+
+    item.smsSent = true;
+    item.smsTime = new Date().toLocaleString('vi-VN');
+
+    appendHistory(index,'💬 Đã bấm SMS - '+formatAmount(amount)+'đ');
+
+    saveCustomer(index);
+    localStorage.setItem('phoneData',JSON.stringify(phoneData));
+    renderList();
+
+    window.location.href = `sms:${phone}&body=${msg}`;
+
+}
+
+function updateNote(index,value){
+
+    phoneData[index].note = value;
+    saveCustomer(index);
+    localStorage.setItem('phoneData',JSON.stringify(phoneData));
+
+}
+
+function toggleCalled(index){
+
+    const item = phoneData[index];
+    item.called = !item.called;
+    item.time = new Date().toLocaleString('vi-VN');
+
+    appendHistory(index,
+        item.called
+        ? '✓ Đánh dấu ĐÃ GỌI (thủ công)'
+        : '✗ Bỏ đánh dấu đã gọi'
+    );
+
+    saveCustomer(index);
+    localStorage.setItem('phoneData',JSON.stringify(phoneData));
+    renderList();
+
+}
+
+function toggleSms(index){
+
+    const item = phoneData[index];
+    item.smsSent = !item.smsSent;
+    item.smsTime = new Date().toLocaleString('vi-VN');
+
+    appendHistory(index,
+        item.smsSent
+        ? '✓ Đánh dấu ĐÃ NHẮN (thủ công)'
+        : '✗ Bỏ đánh dấu đã nhắn'
+    );
+
+    saveCustomer(index);
+    localStorage.setItem('phoneData',JSON.stringify(phoneData));
+    renderList();
+
+}
+
+function deletePhone(index){
+
+    const item = phoneData[index];
+    const key = fbKey(item);
+
+    if(window.db){
+        set(ref(db,'customers/'+key+'/data'), null);
+    }
+
+    phoneData.splice(index,1);
+    localStorage.setItem('phoneData',JSON.stringify(phoneData));
+    renderList();
+
+}
+
+function clearAll(){
+
+    if(confirm('Xóa toàn bộ dữ liệu?')){
+
+        if(window.db){
+            phoneData.forEach(item=>{
+                set(ref(db,'customers/'+fbKey(item)+'/data'), null);
+            });
+        }
+
+        phoneData = [];
+        localStorage.setItem('phoneData',JSON.stringify(phoneData));
+        renderList();
+
+    }
+
+}
+
+function escapeAttr(str){
+    return String(str||'')
+        .replace(/\\/g,'\\\\')
+        .replace(/'/g,"\\'")
+        .replace(/"/g,'&quot;');
+}
+
+function escapeHtml(str){
+    return String(str||'')
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;');
+}
+
+function renderList(){
+
+    const list = document.getElementById('phoneList');
+
+    const search =
+    document.getElementById('searchInput')
+    .value.trim();
+
+    list.innerHTML = '';
+
+    const q = search.toLowerCase();
+
+    const filtered =
+    phoneData.filter(item=>
+        !q ||
+        item.phone.includes(q) ||
+        (item.customerCode||'').toLowerCase().includes(q) ||
+        (item.customerName||'').toLowerCase().includes(q) ||
+        (item.address||'').toLowerCase().includes(q)
+    );
+
+    filtered.forEach(item=>{
+
+        const realIndex = phoneData.indexOf(item);
+        const div = document.createElement('div');
+        div.className='phone-card';
+
+        div.innerHTML = `
+
+        <div class="phone-number">
+        ${item.phone}
+        </div>
+
+        <div class="info-box">
+        🆔 <b>${escapeHtml(item.customerCode)}</b>
+        </div>
+
+        <div class="info-box">
+        👤 <b>${escapeHtml(item.customerName)}</b>
+        </div>
+
+        <div class="info-box">
+        📍 ${escapeHtml(item.address)}
+        </div>
+
+        <div class="info-box">
+        💰 <span class="amount">${formatAmount(item.amount)}</span> đ
+        </div>
+
+        <div>
+
+        <span class="
+        status
+        ${item.called ? 'called':'not-called'}
+        " onclick="toggleCalled(${realIndex})">
+        ${item.called ? '✓ Đã gọi':'✗ Chưa gọi'}
+        </span>
+
+        <span class="
+        status
+        ${item.smsSent ? 'sms-sent':'sms-not-sent'}
+        " onclick="toggleSms(${realIndex})">
+        ${item.smsSent ? '✓ Đã nhắn':'✗ Chưa nhắn'}
+        </span>
+
+        </div>
+
+        ${
+            item.history
+            ?
+            `<div class="history-box">📜 Nhật ký:\n${escapeHtml(item.history)}</div>`
+            :
+            ''
+        }
+
+        <textarea
+        placeholder="📝 Ghi chú riêng"
+        onchange="updateNote(${realIndex},this.value)"
+        >${escapeHtml(item.note)}</textarea>
+
+        <div class="row">
+
+        <button class="primary"
+        onclick="callNumber('${item.phone}',${realIndex})">
+        📲 Gọi
+        </button>
+
+        <button class="success"
+        onclick="sendSMS('${item.phone}','${escapeAttr(item.customerName)}','${escapeAttr(item.customerCode)}','${escapeAttr(item.amount)}',${realIndex})">
+        💬 SMS
+        </button>
+
+        <button class="danger"
+        onclick="deletePhone(${realIndex})">
+        🗑 Xóa
+        </button>
+
+        </div>
+
+        `;
+
+        list.appendChild(div);
+
+    });
+
+    const called = phoneData.filter(p=>p.called).length;
+    const smsSent = phoneData.filter(p=>p.smsSent).length;
+
+    document.getElementById('counter').innerHTML =
+    `<div style="margin-top:10px;font-size:14px">
+    Tổng: <b>${phoneData.length}</b>
+    | Đã gọi: <b>${called}</b>
+    | Đã nhắn: <b>${smsSent}</b>
+    </div>`;
+
+}
+
+if(window.db){
+
+    onValue(
+        ref(db,'customers'),
+        (snapshot)=>{
+
+            const raw = snapshot.val();
+            if(!raw) return;
+
+            const entries = Object.entries(raw);
+            if(entries.length === 0) return;
+
+            const firstKey = entries[0][0];
+            const firstVal = entries[0][1];
+
+            const isOldFormat =
+                !isNaN(firstKey) &&
+                firstVal &&
+                firstVal.phone !== undefined &&
+                firstVal.data === undefined;
+
+            if(isOldFormat){
+
+                phoneData = Object.values(raw)
+                    .filter(v => v && v.phone);
+
+                const newStructure = {};
+                phoneData.forEach(item=>{
+                    const key = fbKey(item);
+                    newStructure[key] = {
+                        data: {
+                            phone: item.phone||'',
+                            customerCode: item.customerCode||'',
+                            customerName: item.customerName||'',
+                            address: item.address||'',
+                            amount: String(item.amount||'0'),
+                            note: item.note||'',
+                            called: item.called||false,
+                            time: item.time||null,
+                            smsSent: item.smsSent||false,
+                            smsTime: item.smsTime||null
+                        }
+                    };
+                    if(item.history){
+                        newStructure[key].logs = {
+                            migrated: {
+                                detail: item.history,
+                                time: new Date().toLocaleString('vi-VN'),
+                                ts: 0
+                            }
+                        };
+                    }
+                });
+
+                set(ref(db,'customers'), newStructure);
+
+                localStorage.setItem('phoneData',JSON.stringify(phoneData));
+                renderList();
+                return;
+
+            }
+
+            phoneData = entries
+                .filter(([,val]) => val && val.data)
+                .map(([,val])=>{
+                    const d = val.data;
+                    return {
+                        phone: d.phone||'',
+                        customerCode: d.customerCode||'',
+                        customerName: d.customerName||'',
+                        address: d.address||'',
+                        amount: d.amount||'0',
+                        note: d.note||'',
+                        called: d.called||false,
+                        time: d.time||null,
+                        smsSent: d.smsSent||false,
+                        smsTime: d.smsTime||null,
+                        history: buildHistoryFromLogs(val.logs)
+                    };
+                });
+
+            localStorage.setItem('phoneData',JSON.stringify(phoneData));
+            renderList();
+
+        }
+    );
+
+}
+
+if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js');
+}
+
+renderList();
+
+</script>
+
+</body>
+</html>
